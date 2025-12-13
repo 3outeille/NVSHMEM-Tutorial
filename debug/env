@@ -1,33 +1,97 @@
+#!/usr/bin/env bash
+# Source this file for NVSHMEM installation and application runs
+# -------------------------------------------------------------
+
+#!/usr/bin/env bash
+# Source this file for NVSHMEM installation and application runs
+# -------------------------------------------------------------
+
+NVSHMEM_VERSION="${NVSHMEM_VERSION:-3.4.5}"
+INSTALL_PREFIX="${INSTALL_PREFIX:-/usr/local/nvshmem-linux-${NVSHMEM_VERSION}}"
+
+# -----------------------------
 # NVSHMEM paths
-export NVSHMEM_HOME=/usr/lib/x86_64-linux-gnu/nvshmem/12
-export LD_LIBRARY_PATH=$NVSHMEM_HOME:$LD_LIBRARY_PATH
+# -----------------------------
+export NVSHMEM_HOME="${NVSHMEM_HOME:-${INSTALL_PREFIX}}"
+export SHMEM_HOME="${NVSHMEM_HOME}"
+export LD_LIBRARY_PATH="$NVSHMEM_HOME/lib:$LD_LIBRARY_PATH"
+export PATH="$NVSHMEM_HOME/bin:$PATH"
 
-# EFA / libfabric
-
-# export NVSHMEM_LIBFABRIC_PROVIDER=efa
-# export NVSHMEM_REMOTE_TRANSPORT=libfabric
-# export FI_EFA_USE_DEVICE_RDMA=1
-# export FI_EFA_USE_RDMA_CM=1
-# export LIBFABRIC_HOME=/opt/amazon/efa/lib
-# export FI_PROVIDER=efa
-
-unset NVSHMEM_LIBFABRIC_PROVIDER
-unset NVSHMEM_REMOTE_TRANSPORT
-unset FI_EFA_USE_DEVICE_RDMA
-unset FI_EFA_USE_RDMA_CM
-unset LIBFABRIC_HOME
-unset FI_PROVIDER
-
-export NVSHMEM_LIBFABRIC_SUPPORT=1
-
-
-
-export NVSHMEM_SYMMETRIC_SIZE=1073741824
-export NVSHMEM_DISABLE_CUDA_VMM=1
-export NVSHMEM_DEBUG=INFO
-#export NVSHMEM_DISABLE_NCCL=1
-
-export NVSHMEM_HOME=/usr/include/nvshmem_12
-export LD_LIBRARY_PATH=$NVSHMEM_HOME:/usr/lib/x86_64-linux-gnu/nvshmem:$LD_LIBRARY_PATH
-
+# -----------------------------
+# NVSHMEM bootstrap / runtime
+# -----------------------------
 export NVSHMEM_BOOTSTRAP=MPI
+#unset NVSHMEM_BOOTSTRAP
+export NVSHMEM_BOOTSTRAP_TWO_STAGE=1
+unset NVSHMEM_BOOTSTRAP_TWO_STAGE
+
+# -----------------------------
+# Disable unused transports
+# -----------------------------
+export NVSHMEM_DISABLE_IB=1
+export NVSHMEM_DISABLE_IBRC=1
+export NVSHMEM_DISABLE_IBDEVX=1
+export NVSHMEM_DISABLE_IBGDA=1
+export NVSHMEM_DISABLE_UCX=1
+export NVSHMEM_DISABLE_NCCL=1
+
+
+unset NVSHMEM_DISABLE_IB
+unset NVSHMEM_DISABLE_IBRC
+unset NVSHMEM_DISABLE_IBDEVX
+unset NVSHMEM_DISABLE_IBGDA
+unset NVSHMEM_DISABLE_UCX
+unset NVSHMEM_DISABLE_NCCL
+
+# -----------------------------
+# Enable libfabric for EFA
+# -----------------------------
+export NVSHMEM_LIBFABRIC_SUPPORT=1
+export LIBFABRIC_HOME=/opt/amazon/efa
+export LD_LIBRARY_PATH="$LIBFABRIC_HOME/lib:$LD_LIBRARY_PATH"
+
+# Configure libfabric / EFA
+export FI_PROVIDER=efa
+#export FI_EFA_FORK_SAFE=1
+unset FI_EFA_FORK_SAFE
+export FI_EFA_ENABLE_SHM_TRANSFER=1
+unset FI_EFA_ENABLE_SHM_TRANSFER
+export FI_EFA_USE_DEVICE_RDMA=1
+export FI_EFA_TX_SIZE=8192
+unset FI_EFA_TX_SIZE
+export FI_EFA_RX_SIZE=8192
+unset FI_EFA_RX_SIZE
+export FI_LOG_LEVEL=warn
+export FI_LOG_PROV=efa
+
+# -----------------------------
+# NVSHMEM runtime tuning
+# -----------------------------
+export NVSHMEM_SYMMETRIC_SIZE=1073741824  # 1GB symmetric heap
+unset NVSHMEM_SYMMETRIC_SIZE
+unset NVSHMEM_DISABLE_CUDA_VMM
+export NVSHMEM_DEBUG=TRACE
+unset NVSHMEM_DEBUG
+export NVSHMEM_DEBUG_SUBSYS=ALL
+unset NVSHMEM_DEBUG_SUBSYS
+export NVSHMEM_LIBFABRIC_PROVIDER=efa
+export NVSHMEM_REMOTE_TRANSPORT=libfabric
+export NVSHMEM_USE_CUDA_IPC=0
+
+# -----------------------------
+# MPI paths
+# -----------------------------
+export MPI_HOME="${MPI_HOME:-/opt/amazon/openmpi}"
+export PATH="$MPI_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$MPI_HOME/lib:$LD_LIBRARY_PATH"
+
+# -----------------------------
+# Cleanup conflicting vars
+# -----------------------------
+unset NCCL_PROTO
+unset NCCL_SOCKET_IFNAME
+
+export NVSHMEM_USE_GDRCOPY=1                 # FOR NVSHMEM BUILD compile only
+export GDRCOPY_HOME=/opt/nvidia/gdrcopy-2.4  # FOR NVSHMEM BUILD compile only
+# ls /opt/nvidia/gdrcopy-2.4
+# CHANGELOG.md  LICENSE  Makefile  README.md  config_arch  include  insmod.sh  packages  src  tests

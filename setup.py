@@ -1,5 +1,8 @@
 import os
 
+# Force CUDA 12.9 before importing torch (must be before torch import!)
+os.environ["CUDA_HOME"] = "/usr/local/cuda-12.9"
+
 from setuptools import find_packages, setup
 from torch.utils.cpp_extension import (  # pylint: disable=import-error
     BuildExtension,
@@ -8,10 +11,8 @@ from torch.utils.cpp_extension import (  # pylint: disable=import-error
 
 
 def get_cuda_root():
-    # get cuda root by nvcc executable path
-    nvcc = os.popen("which nvcc").read().strip()
-    cuda_root = os.path.dirname(os.path.dirname(nvcc))
-    return os.path.abspath(cuda_root)
+    # Use CUDA_HOME we just set
+    return os.environ.get("CUDA_HOME", "/usr/local/cuda-12.9")
 
 
 cuda_root = get_cuda_root()
@@ -70,6 +71,7 @@ setup(
                     "--keep",
                     "--generate-line-info",
                     "-Wno-deprecated-gpu-targets",
+                    "-allow-unsupported-compiler",
                     "-U__CUDA_NO_HALF_OPERATORS__",
                     "-U__CUDA_NO_HALF_CONVERSIONS__",
                     "-U__CUDA_NO_HALF2_OPERATORS__",

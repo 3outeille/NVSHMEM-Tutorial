@@ -1,49 +1,85 @@
 #!/usr/bin/env bash
 
-# scontrol create reservation reservationName=nvshmem_xp nodeCnt=2 starttime=now duration="6-00:00:00" account=huggingface partition=hopper-prod flags=maint
-# cd ~/fsx_mathieu_morlon/nvshmem-hello
-# salloc --nodes=2 --reservation=nvshmem_xp --time=1-0 --exclusive bash
-
-
 module unload cuda/12.9
 module unload cuda/12.4
 module load cuda/12.9
 
 source ./env
 
+#srun --mpi=pmix -l --reservation nvshmem_xp --gpus-per-task=1 --time 10 --nodes=2 --tasks-per-node=1 --ntasks 2 /usr/local/nvshmem-linux-3.4.5/bin/perftest/device/pt-to-pt/shmem_put_bw
+
+echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
+
 nvcc --version
 
-echo "\$NVSHMEM_LIBFABRIC_SUPPORT : $NVSHMEM_LIBFABRIC_SUPPORT"
-echo "\$LIBFABRIC_HOME : $LIBFABRIC_HOME"
-echo "\$FI_PROVIDER : $FI_PROVIDER"
-echo "\$NVSHMEM_HOME : $NVSHMEM_HOME"
-echo "\$LD_LIBRARY_PATH : $LD_LIBRARY_PATH"
+echo "\$NVSHMEM_BOOTSTRAP : $NVSHMEM_BOOTSTRAP"
 
-echo -n "⚒️👷🏗️   Compiling my_nvshmem_hello.cu with nvcc and loading CUDA modules... "
+set -o pipefail
+echo -n "⚒️👷🏗️   Compiling... "
 
 nvcc -rdc=true -ccbin g++ -gencode=arch=compute_90,code=sm_90 \
-  -I $NVSHMEM_HOME \
+  -I $NVSHMEM_HOME/include \
   my_nvshmem_hello.cu \
-  /usr/lib/x86_64-linux-gnu/nvshmem/12/libnvshmem_device.a \
   -o nvshmem_hello \
-  -L /usr/lib/x86_64-linux-gnu/nvshmem/ \
-  -lnvshmem_host -lnvshmem_device && echo "✅ COMPILE OK" || echo "compile failure ‼  ️⚠️"
+  -L $NVSHMEM_HOME/lib \
+  -lnvshmem
 
-echo "🚀🏁▶️   Running nvshmem_hello via nvshmrun.hydra ..."
-echo ""
-set -o pipefail
+if [ $? -eq 0 ]; then
+  echo "✅ COMPILE OK"
+else
+  echo "compile failure ‼️⚠️"
+  exit 1
+fi
+
+echo "🚀 Testing with SINGLE NODE first (8 GPUs)..."
+
+# Test with single node first
+#-x MPI_HOME \
 set -x
-#/usr/bin/nvshmem_12/nvshmrun.hydra -np 8 -gpus-per-proc 2 -prepend-rank -f hosts.txt bash -c "source ./env ; ./nvshmem_hello" 2>&1 | tee hello.log 
-/usr/bin/nvshmem_12/nvshmrun.hydra -np 8 -gpus-per-proc 2 -prepend-rank -f hosts.txt ./nvshmem_hello 2>&1 | tee hello.log 
-#/usr/bin/nvshmem_12/nvshmrun.hydra -np 8 -gpus-per-proc 1 -prepend-rank -f hosts_single.txt bash -c "source ./env ; ./nvshmem_hello" 2>&1 | tee hello.log 
+mpirun --hostfile hosts_single.txt -np 8 --map-by ppr:8:node \
+  -x NVSHMEM_LIBFABRIC_SUPPORT \
+  -x NVSHMEM_BOOTSTRAP \
+  -x LD_LIBRARY_PATH \
+  -x FI_PROVIDER \
+  -x NVSHMEM_REMOTE_TRANSPORT \
+  -x FI_EFA_USE_DEVICE_RDMA \
+  -x NVSHMEM_LIBFABRIC_PROVIDER \
+  -x FI_LOG_LEVEL \
+  -x PATH \
+  bash -c 'export CUDA_VISIBLE_DEVICES=${OMPI_COMM_WORLD_LOCAL_RANK}; echo "[Rank $OMPI_COMM_WORLD_RANK] CVD=$CUDA_VISIBLE_DEVICES"; exec ./nvshmem_hello' \
+  2>&1 | tee hello.log
+
 return_code=$?
 set +x
 
 if [ $return_code -eq 0 ]; then
-    echo "✅✌️ nvshmem_hello ran with success"
+    echo "✅ Single node SUCCESS! Now testing 2 nodes..."
 else
-    echo " ⛔‼️ Failure of nvshmem_hello execution" 
+    echo "⛔ Single node FAILED - fix this first before trying 2 nodes" 
+    exit 1
 fi
 
-echo " 📝 For logs, run:"
-echo "less hello.log"
+set -x
+mpirun --hostfile hosts.txt -np 16 --map-by ppr:8:node \
+  -x NVSHMEM_LIBFABRIC_SUPPORT \
+  -x NVSHMEM_BOOTSTRAP \
+  -x LD_LIBRARY_PATH \
+  -x FI_PROVIDER \
+  -x FI_EFA_USE_DEVICE_RDMA \
+  -x NVSHMEM_LIBFABRIC_PROVIDER \
+  -x FI_LOG_LEVEL \
+  -x NVSHMEM_REMOTE_TRANSPORT \
+  -x PATH \
+  bash -c 'export CUDA_VISIBLE_DEVICES=${OMPI_COMM_WORLD_LOCAL_RANK}; echo "[Rank $OMPI_COMM_WORLD_RANK] CVD=$CUDA_VISIBLE_DEVICES"; exec ./nvshmem_hello' \
+  2>&1 | tee hello_2node.log
+
+
+  return_code=$?
+set +x
+
+if [ $return_code -eq 0 ]; then
+    echo "✅ 2 nodes SUCCESS! "
+else
+    echo "⛔ 2 nodes FAILED" 
+    exit 1
+fi
